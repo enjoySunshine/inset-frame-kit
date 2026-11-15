@@ -17,7 +17,15 @@ import {
 import { PacketRetrievalOptions } from '../media-sink';
 import { DEFAULT_TRACK_DISPOSITION, MetadataTags, TrackDisposition } from '../metadata';
 import { TrackType } from '../output';
-import { arrayArgmin, assert, joinPaths, MaybePromise, TransformationMatrix, UNDETERMINED_LANGUAGE } from '../misc';
+import {
+	arrayArgmin,
+	assert,
+	joinPaths,
+	MaybePromise,
+	Rectangle,
+	TransformationMatrix,
+	UNDETERMINED_LANGUAGE,
+} from '../misc';
 import { EncodedPacket } from '../packet';
 import { readAllLines } from '../reader';
 import {
@@ -884,6 +892,14 @@ class HlsInputVideoTrackBacking
 
 	getSquarePixelHeight(): MaybePromise<number> {
 		return this.delegate(() => this.backingVideoTrack!.getSquarePixelHeight());
+	}
+
+	getVisibleRect(): MaybePromise<Rectangle | null> {
+		if (this.backingVideoTrack) {
+			return this.delegate(() => this.backingVideoTrack!.getVisibleRect?.() ?? null);
+		}
+
+		return null;
 	}
 
 	getMetadataDisplayWidth(): number | null {

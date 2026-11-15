@@ -49,6 +49,7 @@ import {
 	MaybePromise,
 	composeRotationAndFlip,
 	promiseWithResolvers,
+	Rectangle,
 	Rotation,
 } from './misc';
 import { Output, OutputTrackGroup } from './output';
@@ -1526,6 +1527,11 @@ export class Conversion {
 			? [squarePixelWidth, squarePixelHeight]
 			: [squarePixelHeight, squarePixelWidth];
 
+		// The visible region is metadata, so it can be forwarded whenever the output's coded frames keep the input's
+		// coded dimensions. It becomes meaningless once the frames get cropped or resized.
+		const sourceVisibleRect = await track.getVisibleRect();
+		let outputVisibleRect: Rectangle | null = sourceVisibleRect;
+
 		let crop = trackOptions.crop;
 		if (crop) {
 			crop = clampCropRectangle(crop, rotatedWidth, rotatedHeight);
@@ -1897,6 +1903,7 @@ export class Conversion {
 				outputTrackRotation = 0;
 				outputTrackFlip = false;
 				outputTrackMatrix = null;
+				outputVisibleRect = null;
 
 				encodingConfig.transform.width = width;
 				encodingConfig.transform.height = height;
@@ -1993,6 +2000,7 @@ export class Conversion {
 			rotation: outputTrackRotation,
 			flip: outputTrackFlip,
 			transformationMatrix: outputTrackMatrix ?? undefined,
+			visibleRect: outputVisibleRect ?? undefined,
 			canBeTransparent,
 			group: ownGroup ?? trackOptions.group,
 			bitrate: bitrate ?? undefined,

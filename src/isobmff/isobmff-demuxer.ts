@@ -74,6 +74,7 @@ import {
 	MATRIX_COEFFICIENTS_MAP_INVERSE,
 	multiplyMatrices,
 	Rational,
+	Rectangle,
 	textDecoder,
 	TransformationMatrix,
 	TRANSFER_CHARACTERISTICS_MAP_INVERSE,
@@ -173,6 +174,7 @@ type InternalTrack = {
 		height: number;
 		squarePixelWidth: number;
 		squarePixelHeight: number;
+		visibleRect: Rectangle | null;
 		codec: VideoCodec | null;
 		codecDescription: Uint8Array | null;
 		colorSpace: VideoColorSpaceInit;
@@ -1208,6 +1210,7 @@ export class IsobmffDemuxer extends Demuxer {
 						height: -1,
 						squarePixelWidth: -1,
 						squarePixelHeight: -1,
+						visibleRect: null,
 						codec: null,
 						codecDescription: null,
 						colorSpace: { ...EMPTY_COLOR_SPACE },
@@ -1746,6 +1749,59 @@ export class IsobmffDemuxer extends Demuxer {
 					} else {
 						track.info.squarePixelHeight = Math.round(track.info.height * den / num);
 					}
+				}
+			}; break;
+
+			case 'clap': {
+				const track = this.currentTrack;
+				if (!track || track.info?.type !== 'video') {
+					break;
+				}
+
+				// Clean Aperture Box. The aperture is centered on the coded frame plus a horizontal/vertical offset,
+				// using a continuous (pixel-edge) coordinate system in which the frame spans [0, width] x [0, height].
+				const apertureWidthNum = readU32Be(slice);
+				const apertureWidthDen = readU32Be(slice);
+				const apertureHeightNum = readU32Be(slice);
+				const apertureHeightDen = readU32Be(slice);
+				const horizOffNum = readI32Be(slice);
+				const horizOffDen = readU32Be(slice);
+				const vertOffNum = readI32Be(slice);
+				const vertOffDen = readU32Be(slice);
+
+				if (
+					apertureWidthDen === 0 || apertureHeightDen === 0
+					|| horizOffDen === 0 || vertOffDen === 0
+				) {
+					Logging._warn('Invalid clap box: denominators must not be zero.');
+					break;
+				}
+
+				const apertureWidth = apertureWidthNum / apertureWidthDen;
+				const apertureHeight = apertureHeightNum / apertureHeightDen;
+				const horizOff = horizOffNum / horizOffDen;
+				const vertOff = vertOffNum / vertOffDen;
+
+				// Convert to a top-left-based integer rectangle. The aperture's center is the frame center plus the
+				// offset; round to the nearest pixel edge.
+				const left = Math.round((track.info.width - apertureWidth) / 2 + horizOff);
+				const top = Math.round((track.info.height - apertureHeight) / 2 + vertOff);
+				const width = Math.round(apertureWidth);
+				const height = Math.round(apertureHeight);
+
+				if (
+					width <= 0 || height <= 0 || left < 0 || top < 0
+					|| left + width > track.info.width || top + height > track.info.height
+				) {
+					Logging._warn('Invalid clap box: aperture lies outside the coded frame.');
+					break;
+				}
+
+				// A full-frame aperture carries no information
+				if (left === 0 && top === 0 && width === track.info.width && height === track.info.height) {
+					track.info.visibleRect = null;
+				} else {
+					track.info.visibleRect = { left, top, width, height };
 				}
 			}; break;
 
@@ -3706,6 +3762,10 @@ class IsobmffVideoTrackBacking extends IsobmffTrackBacking implements InputVideo
 
 	getSquarePixelHeight() {
 		return this.internalTrack.info.squarePixelHeight;
+	}
+
+	getVisibleRect(): Rectangle | null {
+		return this.internalTrack.info.visibleRect;
 	}
 
 	getTransformationMatrix(): TransformationMatrix {

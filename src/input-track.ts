@@ -27,6 +27,7 @@ import {
 	matrixIsFlipped,
 	MaybePromise,
 	Rational,
+	Rectangle,
 	roundToDivisor,
 	simplifyRational,
 	TransformationMatrix,
@@ -589,6 +590,7 @@ export interface InputVideoTrackBacking extends InputTrackBacking {
 	getSquarePixelHeight(): MaybePromise<number>;
 	getMetadataDisplayWidth?(): MaybePromise<number | null>;
 	getMetadataDisplayHeight?(): MaybePromise<number | null>;
+	getVisibleRect?(): MaybePromise<Rectangle | null>;
 	getTransformationMatrix(): MaybePromise<TransformationMatrix>;
 	getColorSpace(): Promise<VideoColorSpaceInit>;
 	canBeTransparent(): Promise<boolean>;
@@ -657,6 +659,29 @@ export class InputVideoTrack extends InputTrack {
 	 */
 	get codedHeight() {
 		return requireSync(this._backing.getCodedHeight(), 'codedHeight', 'getCodedHeight');
+	}
+
+	/**
+	 * Returns the track's visible region, or `null` if the track doesn't specify one (in which case the entire coded
+	 * frame is visible). The rectangle is given in the coded pixel grid of the track's samples: `left` and `top` are
+	 * zero-based offsets from the top-left corner of the coded frame, and `width` and `height` give the size of the
+	 * visible region. These values are not affected by pixel aspect ratio, rotation or flip.
+	 */
+	async getVisibleRect() {
+		return this._backing.getVisibleRect?.() ?? null;
+	}
+
+	/**
+	 * The track's visible region, or `null` if the track doesn't specify one.
+	 * @deprecated Use {@link InputVideoTrack.getVisibleRect} instead.
+	 */
+	get visibleRect() {
+		const raw = this._backing.getVisibleRect?.();
+		if (raw === undefined) {
+			return null;
+		}
+
+		return requireSync(raw, 'visibleRect', 'getVisibleRect');
 	}
 
 	/**

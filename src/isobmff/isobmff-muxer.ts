@@ -25,7 +25,15 @@ import { Muxer } from '../muxer';
 import { Output, OutputAudioTrack, OutputSubtitleTrack, OutputTrack, OutputVideoTrack, TrackType } from '../output';
 import { Writer } from '../writer';
 import { BufferTarget } from '../target';
-import { assert, computeRationalApproximation, last, promiseWithResolvers, Rational, simplifyRational } from '../misc';
+import {
+	assert,
+	computeRationalApproximation,
+	last,
+	promiseWithResolvers,
+	Rational,
+	simplifyRational,
+	validateVisibleRect,
+} from '../misc';
 import { IsobmffOutputFormatOptions, IsobmffOutputFormat, MovOutputFormat, CmafOutputFormat } from '../output-format';
 import { inlineTimestampRegex, SubtitleConfig, SubtitleCue, SubtitleMetadata } from '../subtitles';
 import { aacChannelMap, aacFrequencyTable, buildAacAudioSpecificConfig } from '../../shared/aac-misc';
@@ -504,6 +512,15 @@ export class IsobmffMuxer extends Muxer {
 
 		// Kicks for ProRes 4444.
 		const hasAlphaChannel = decoderConfig.codec === 'ap4h' || decoderConfig.codec === 'ap4x';
+
+		if (track.metadata.visibleRect) {
+			validateVisibleRect(
+				track.metadata.visibleRect,
+				decoderConfig.codedWidth,
+				decoderConfig.codedHeight,
+				'metadata.visibleRect',
+			);
+		}
 
 		const newTrackData: IsobmffVideoTrackData = {
 			muxer: this,

@@ -314,9 +314,18 @@ await videoTrack.getFlip(); // => boolean
 // derived from:
 await videoTrack.getTransformationMatrix(); // => TransformationMatrix
 
+// Get the visible region of the coded frames, or null if the entire
+// coded frame is visible:
+await videoTrack.getVisibleRect(); // => Rectangle | null
+
 // Get the aspect ratio of the track's pixels (usually 1:1):
 await videoTrack.getPixelAspectRatio(); // => { num: number, den: number }
 ```
+
+The visible region, when present, is given in the coded pixel grid: `left` and `top` are zero-based offsets from
+the top-left corner of the coded frame, and `width` and `height` give the size of the region. These numbers are not
+affected by pixel aspect ratio, rotation or flip, so a rotation of 90 degrees does _not_ swap `width` and `height`.
+Files can store this region using the MP4/MOV `clap` (Clean Aperture) box or the Matroska `PixelCrop*` elements.
 
 To determine a video track's frame rate (FPS), compute its [frame rate metrics](#frame-rate-metrics).
 

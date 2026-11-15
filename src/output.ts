@@ -13,9 +13,12 @@ import {
 	isIso639Dash2LanguageCode,
 	isThenable,
 	MaybePromise,
+	Rectangle,
 	Rotation,
 	toArray,
 	TransformationMatrix,
+	validateRectangle,
+	validateVisibleRect,
 } from './misc';
 import { MetadataTags, TrackDisposition, validateMetadataTags, validateTrackDisposition } from './metadata';
 import { Muxer } from './muxer';
@@ -276,6 +279,16 @@ export type VideoTrackMetadata = BaseTrackMetadata & {
 	rotation?: Rotation;
 	/** Whether the track's frames should be flipped horizontally (about the vertical axis), after rotation. */
 	flip?: boolean;
+	/**
+	 * The visible region of the track's frames, given in the coded pixel grid of the track's samples: `left` and
+	 * `top` are offsets from the top-left corner of the coded frame, and `width` and `height` are the size of the
+	 * visible region. Both offsets are zero-based and are measured in coded pixels, meaning they are not affected by
+	 * pixel aspect ratio, rotation or flip. The rectangle must lie fully inside the coded frame.
+	 *
+	 * Use this to signal that part of the coded frame is intended to be cropped away (an "inset frame" or "clean
+	 * aperture") without re-encoding the video. When omitted, the entire coded frame is visible.
+	 */
+	visibleRect?: Rectangle;
 	/**
 	 * The full transformation matrix to apply to the track's frames for presentation. When set, this takes precedence
 	 * over `rotation` and `flip`. Formats that can't store an arbitrary matrix extract the closest rotation and
@@ -678,6 +691,17 @@ export class Output<
 		}
 		if (metadata.flip !== undefined && typeof metadata.flip !== 'boolean') {
 			throw new TypeError('metadata.flip, when provided, must be a boolean.');
+		}
+		if (metadata.visibleRect !== undefined) {
+			validateRectangle(metadata.visibleRect, 'metadata.visibleRect');
+			if (metadata.visibleRect.width === 0 || metadata.visibleRect.height === 0) {
+				throw new TypeError('metadata.visibleRect.width and metadata.visibleRect.height must be positive.');
+			}
+			// When the coded dimensions are known up front, we can also verify the region lies inside them
+			const { codedWidth, codedHeight } = metadata.decoderConfig ?? {};
+			if (codedWidth !== undefined && codedHeight !== undefined) {
+				validateVisibleRect(metadata.visibleRect, codedWidth, codedHeight, 'metadata.visibleRect');
+			}
 		}
 		if (
 			metadata.transformationMatrix !== undefined

@@ -31,6 +31,7 @@ import {
 	uint8ArraysAreEqual,
 	writeBits,
 	roundToDivisor,
+	validateVisibleRect,
 } from '../misc';
 import {
 	CODEC_STRING_MAP,
@@ -455,6 +456,30 @@ export class MatroskaMuxer extends Muxer {
 				!== trackData.info.aspectRatio.den * trackData.info.width
 			);
 
+		const visibleRect = trackData.track.metadata.visibleRect;
+		const { width, height } = trackData.info;
+
+		// WebM doesn't include the PixelCrop* elements, so visible regions can't be stored in it
+		const canWriteVisibleRect = !(this.format instanceof WebMOutputFormat);
+		const isFullFrame = !!visibleRect && visibleRect.left === 0 && visibleRect.top === 0
+			&& visibleRect.width === width && visibleRect.height === height;
+
+		let crop: { left: number; top: number; right: number; bottom: number } | null = null;
+		if (visibleRect && !isFullFrame) {
+			if (canWriteVisibleRect) {
+				validateVisibleRect(visibleRect, width, height, 'visibleRect');
+
+				crop = {
+					left: visibleRect.left,
+					top: visibleRect.top,
+					right: width - visibleRect.left - visibleRect.width,
+					bottom: height - visibleRect.top - visibleRect.height,
+				};
+			} else {
+				Logging._warn('WebM does not support visible regions; ignoring the track\'s visibleRect.');
+			}
+		}
+
 		const colorSpace = trackData.info.decoderConfig.colorSpace;
 		const videoElement: EBMLElement = { id: EBMLId.Video, data: [
 			{ id: EBMLId.PixelWidth, data: trackData.info.width },
@@ -462,6 +487,10 @@ export class MatroskaMuxer extends Muxer {
 			(hasNonSquarePixelAspectRatio ? { id: EBMLId.DisplayWidth, data: trackData.info.aspectRatio!.num } : null),
 			(hasNonSquarePixelAspectRatio ? { id: EBMLId.DisplayHeight, data: trackData.info.aspectRatio!.den } : null),
 			(hasNonSquarePixelAspectRatio ? { id: EBMLId.DisplayUnit, data: 3 } : null), // 3 = display aspect ratio
+			(crop && crop.left > 0 ? { id: EBMLId.PixelCropLeft, data: crop.left } : null),
+			(crop && crop.top > 0 ? { id: EBMLId.PixelCropTop, data: crop.top } : null),
+			(crop && crop.right > 0 ? { id: EBMLId.PixelCropRight, data: crop.right } : null),
+			(crop && crop.bottom > 0 ? { id: EBMLId.PixelCropBottom, data: crop.bottom } : null),
 			trackData.info.alphaMode ? { id: EBMLId.AlphaMode, data: 1 } : null,
 			(colorSpaceIsEmpty(colorSpace)
 				? null

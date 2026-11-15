@@ -427,7 +427,8 @@ export class HlsMuxer extends Muxer {
 					videoCount++;
 					requiresTransformationMetadata ||= (track.metadata.rotation ?? 0) !== 0
 						|| !!track.metadata.flip
-						|| !!track.metadata.transformationMatrix;
+						|| !!track.metadata.transformationMatrix
+						|| !!track.metadata.visibleRect;
 				} else if (track.isAudioTrack()) {
 					audioCount++;
 				}

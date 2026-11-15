@@ -334,7 +334,8 @@ videoSample.microsecondDuration; // => Duration in microseconds
 // Color space of the sample
 videoSample.colorSpace; // => VideoColorSpace
 
-videoSample.visibleRect; // Rectangle
+// The sample's visible region within the coded pixel grid
+videoSample.visibleRect; // => Rectangle
 
 // Encode options used when this sample is passed to an encoder
 videoSample.encodeOptions; // => VideoEncoderEncodeOptions (defaults to {})

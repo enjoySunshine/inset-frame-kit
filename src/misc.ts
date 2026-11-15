@@ -1412,6 +1412,28 @@ export const validateRectangle = (rect: Rectangle, propertyPath: string) => {
 	}
 };
 
+/**
+ * Validates a visible region rectangle against the dimensions of the coded frame it is defined in.
+ * @internal
+ */
+export const validateVisibleRect = (
+	rect: Rectangle,
+	codedWidth: number,
+	codedHeight: number,
+	propertyPath: string,
+) => {
+	validateRectangle(rect, propertyPath);
+	if (rect.width === 0 || rect.height === 0) {
+		throw new TypeError(`${propertyPath}.width and ${propertyPath}.height must be positive.`);
+	}
+	if (rect.left + rect.width > codedWidth || rect.top + rect.height > codedHeight) {
+		throw new TypeError(
+			`${propertyPath} (${rect.left}, ${rect.top}, ${rect.width}, ${rect.height}) must lie fully inside the`
+			+ ` coded frame (${codedWidth}x${codedHeight}).`,
+		);
+	}
+};
+
 export type NonFunctionKeys<T> = {
 	[K in keyof T]-?: T[K] extends ((...args: never[]) => unknown) ? never : K
 }[keyof T];

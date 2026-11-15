@@ -54,6 +54,7 @@ import {
 	DEG_TO_RAD,
 	multiplyMatrices,
 	normalizeRotation,
+	Rectangle,
 	Rotation,
 	rotationMatrix,
 	roundIfAlmostInteger,
@@ -237,6 +238,10 @@ type InternalTrack = {
 			displayWidth: number | null;
 			displayHeight: number | null;
 			displayUnit: number | null;
+			cropLeft: number;
+			cropTop: number;
+			cropRight: number;
+			cropBottom: number;
 			squarePixelWidth: number;
 			squarePixelHeight: number;
 			horizontalScale: number;
@@ -1194,25 +1199,42 @@ export class MatroskaDemuxer extends Demuxer {
 						&& this.currentTrack.info.width !== -1
 						&& this.currentTrack.info.height !== -1
 					) {
-						this.currentTrack.info.squarePixelWidth = this.currentTrack.info.width;
-						this.currentTrack.info.squarePixelHeight = this.currentTrack.info.height;
+						const { width, height } = this.currentTrack.info;
+
+						// Per the Matroska spec, PixelCrop* is applied first, and DisplayWidth/DisplayHeight then
+						// describe the size of the (already cropped) frame to display.
+						const croppedWidth = width - this.currentTrack.info.cropLeft - this.currentTrack.info.cropRight;
+						const croppedHeight
+							= height - this.currentTrack.info.cropTop - this.currentTrack.info.cropBottom;
+
+						if (
+							!Number.isInteger(croppedWidth) || !Number.isInteger(croppedHeight)
+							|| croppedWidth <= 0 || croppedHeight <= 0
+						) {
+							Logging._warn(
+								`Track #${this.currentTrack.id} has an invalid visible region; ignoring it.`,
+							);
+							this.currentTrack.info.cropLeft = 0;
+							this.currentTrack.info.cropTop = 0;
+							this.currentTrack.info.cropRight = 0;
+							this.currentTrack.info.cropBottom = 0;
+						}
+
+						this.currentTrack.info.squarePixelWidth = width;
+						this.currentTrack.info.squarePixelHeight = height;
 
 						if (
 							this.currentTrack.info.displayWidth !== null
 							&& this.currentTrack.info.displayHeight !== null
 						) {
-							const num = this.currentTrack.info.displayWidth * this.currentTrack.info.height;
-							const den = this.currentTrack.info.displayHeight * this.currentTrack.info.width;
+							const num = this.currentTrack.info.displayWidth * croppedHeight;
+							const den = this.currentTrack.info.displayHeight * croppedWidth;
 
 							if (num > 0 && den > 0) {
 								if (num > den) {
-									this.currentTrack.info.squarePixelWidth = Math.round(
-										this.currentTrack.info.width * num / den,
-									);
+									this.currentTrack.info.squarePixelWidth = Math.round(width * num / den);
 								} else {
-									this.currentTrack.info.squarePixelHeight = Math.round(
-										this.currentTrack.info.height * den / num,
-									);
+									this.currentTrack.info.squarePixelHeight = Math.round(height * den / num);
 								}
 							}
 						}
@@ -1339,6 +1361,10 @@ export class MatroskaDemuxer extends Demuxer {
 						displayWidth: null,
 						displayHeight: null,
 						displayUnit: null,
+						cropLeft: 0,
+						cropTop: 0,
+						cropRight: 0,
+						cropBottom: 0,
 						squarePixelWidth: -1,
 						squarePixelHeight: -1,
 						horizontalScale: 1,
@@ -1504,6 +1530,30 @@ export class MatroskaDemuxer extends Demuxer {
 				if (this.currentTrack?.info?.type !== 'video') break;
 
 				this.currentTrack.info.displayUnit = readUnsignedInt(slice, size);
+			}; break;
+
+			case EBMLId.PixelCropLeft: {
+				if (this.currentTrack?.info?.type !== 'video' || this.isWebM) break;
+
+				this.currentTrack.info.cropLeft = readUnsignedInt(slice, size);
+			}; break;
+
+			case EBMLId.PixelCropTop: {
+				if (this.currentTrack?.info?.type !== 'video' || this.isWebM) break;
+
+				this.currentTrack.info.cropTop = readUnsignedInt(slice, size);
+			}; break;
+
+			case EBMLId.PixelCropRight: {
+				if (this.currentTrack?.info?.type !== 'video' || this.isWebM) break;
+
+				this.currentTrack.info.cropRight = readUnsignedInt(slice, size);
+			}; break;
+
+			case EBMLId.PixelCropBottom: {
+				if (this.currentTrack?.info?.type !== 'video' || this.isWebM) break;
+
+				this.currentTrack.info.cropBottom = readUnsignedInt(slice, size);
 			}; break;
 
 			case EBMLId.AlphaMode: {
@@ -2725,6 +2775,23 @@ class MatroskaVideoTrackBacking extends MatroskaTrackBacking implements InputVid
 
 	getSquarePixelHeight() {
 		return this.internalTrack.info.squarePixelHeight;
+	}
+
+	getVisibleRect(): Rectangle | null {
+		const info = this.internalTrack.info;
+		if (
+			info.cropLeft === 0 && info.cropTop === 0
+			&& info.cropRight === 0 && info.cropBottom === 0
+		) {
+			return null;
+		}
+
+		return {
+			left: info.cropLeft,
+			top: info.cropTop,
+			width: info.width - info.cropLeft - info.cropRight,
+			height: info.height - info.cropTop - info.cropBottom,
+		};
 	}
 
 	getTransformationMatrix() {

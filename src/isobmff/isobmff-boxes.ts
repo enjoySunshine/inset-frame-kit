@@ -28,6 +28,7 @@ import {
 	keyValueIterator,
 	toDataView,
 	findLastIndex,
+	simplifyRational,
 } from '../misc';
 import {
 	AudioCodec,
@@ -774,6 +775,7 @@ export const videoSampleDescription = (
 ], [
 	VIDEO_CODEC_TO_CONFIGURATION_BOX[trackData.track.source._codec]?.(trackData) ?? null,
 	pasp(trackData),
+	clap(trackData),
 	colorSpaceIsEmpty(trackData.info.decoderConfig.colorSpace)
 		? null
 		: colr(trackData),
@@ -802,6 +804,43 @@ export const pasp = (trackData: IsobmffVideoTrackData) => {
 	return box('pasp', [
 		u32(trackData.info.pixelAspectRatio.num),
 		u32(trackData.info.pixelAspectRatio.den),
+	]);
+};
+
+/** Clean Aperture Box: Specifies the visible region of the coded frame. */
+export const clap = (trackData: IsobmffVideoTrackData) => {
+	const visibleRect = trackData.track.metadata.visibleRect;
+	if (!visibleRect) {
+		return null;
+	}
+
+	const { left, top, width, height } = visibleRect;
+	const codedWidth = trackData.info.width;
+	const codedHeight = trackData.info.height;
+
+	// A full-frame aperture carries no information, so we leave it out
+	if (left === 0 && top === 0 && width === codedWidth && height === codedHeight) {
+		return null;
+	}
+
+	// The aperture offset is expressed relative to the center of the coded frame, in the continuous coordinate
+	// system where the frame spans [0, codedWidth] x [0, codedHeight].
+	const horizOff = left + width / 2 - codedWidth / 2;
+	const vertOff = top + height / 2 - codedHeight / 2;
+
+	// Represent the offsets as reduced fractions with a positive denominator
+	const horizOffRatio = simplifyRational({ num: Math.round(horizOff * 2), den: 2 });
+	const vertOffRatio = simplifyRational({ num: Math.round(vertOff * 2), den: 2 });
+
+	return box('clap', [
+		u32(width), // Aperture width numerator
+		u32(1), // Aperture width denominator
+		u32(height), // Aperture height numerator
+		u32(1), // Aperture height denominator
+		i32(horizOffRatio.num), // Horizontal offset numerator
+		u32(horizOffRatio.den), // Horizontal offset denominator
+		i32(vertOffRatio.num), // Vertical offset numerator
+		u32(vertOffRatio.den), // Vertical offset denominator
 	]);
 };
 

@@ -54,6 +54,9 @@ Optionally, you can specify additional track metadata when adding tracks:
 output.addVideoTrack(videoSource, {
 	// Clockwise rotation in degrees
 	rotation: 90,
+	// Visible region of the coded frames, in coded pixels; anything
+	// outside of it should be cropped away by players
+	visibleRect: { left: 8, top: 6, width: 288, height: 162 },
 	// Expected frame rate in hertz
 	frameRate: 30,
 });
@@ -77,6 +80,12 @@ output.addSubtitleTrack(subtitleSourceIta, { languageCode: 'ita' });
 ```
 
 ::: info
+The optional `visibleRect` video track metadata option marks part of each coded frame as visible, without requiring
+the frames themselves to be re-encoded. The rectangle is given in coded pixels: `left` and `top` are zero-based
+offsets from the top-left corner of the coded frame, and must lie fully inside the coded frame. It is written to MP4
+and MOV files using the `clap` box and to Matroska files using the `PixelCrop*` elements; WebM, MPEG-TS and other
+formats have no way to store it.
+
 The optional `frameRate` video track metadata option specifies the expected frame rate of the video. All timestamps and durations of frames that will be added to this track will be snapped to the specified frame rate. You should avoid adding frames more often than the rate permits, as this will lead to multiple frames having the same timestamp.
 
 To precisely achieve common fractional frame rates, make sure to use their exact fractional forms:
